@@ -103,5 +103,15 @@ namespace FluentValidation.Tests.WebApi {
 
             result.IsValidField("model.Child.Name").ShouldBeFalse();
         }
-    }
+
+		[Fact]
+		public void Should_validate_ruleset_model()
+		{
+			var result = InvokeTest<RulesetTestModel>(@"{Email: 'foo', Surname:'foo', Forename:'foo'}", "application/json");
+
+			result.IsValidField("model.Email").ShouldBeFalse();
+			result.IsValidField("model.Surname").ShouldBeFalse();
+			result.IsValidField("model.Forename").ShouldBeFalse();
+		}
+	}
 }

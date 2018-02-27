@@ -20,8 +20,10 @@ namespace FluentValidation.WebApi
 {
 	using System;
 	using System.Collections.Generic;
+	using System.Linq;
 	using System.Web.Http;
 	using System.Web.Http.Metadata;
+	using System.Web.Http.ModelBinding.Binders;
 	using System.Web.Http.Validation;
 
 	using FluentValidation.Attributes;
@@ -34,6 +36,18 @@ namespace FluentValidation.WebApi
 	public class FluentValidationModelValidatorProvider : ModelValidatorProvider {
 		public IValidatorFactory ValidatorFactory { get; set; }
 
+		private Dictionary<Type, FluentValidationModelValidationFactory> validatorFactories = new Dictionary<Type, FluentValidationModelValidationFactory>() {
+			{ typeof(INotNullValidator), (metadata, validatorProviders, rule, validator) => new RequiredFluentValidationPropertyValidator(metadata, validatorProviders, rule, validator) },
+			{ typeof(INotEmptyValidator), (metadata, validatorProviders, rule, validator) => new RequiredFluentValidationPropertyValidator(metadata, validatorProviders, rule, validator) },
+			// email must come before regex.
+			{ typeof(IEmailValidator), (metadata, validatorProviders, rule, validator) => new EmailFluentValidationPropertyValidator(metadata, validatorProviders, rule, validator) },
+			{ typeof(IRegularExpressionValidator), (metadata, validatorProviders, rule, validator) => new RegularExpressionFluentValidationPropertyValidator(metadata, validatorProviders, rule, validator) },
+			{ typeof(ILengthValidator), (metadata, validatorProviders, rule, validator) => new StringLengthFluentValidationPropertyValidator(metadata, validatorProviders, rule, validator) },
+			{ typeof(GreaterThanOrEqualValidator), (metadata, validatorProviders, rule, validator) => new MinFluentValidationPropertyValidator(metadata, validatorProviders, rule, validator) },
+			{ typeof(LessThanOrEqualValidator), (metadata, validatorProviders, rule, validator) => new MaxFluentValidationPropertyValidator(metadata, validatorProviders, rule, validator) },
+			{ typeof(EqualValidator), (metadata, validatorProviders, rule, validator) => new EqualToFluentValidationPropertyValidator(metadata, validatorProviders, rule, validator) },
+			{ typeof(CreditCardValidator), (metadata, validatorProviders, rule, validator) => new CreditCardFluentValidationPropertyValidator(metadata, validatorProviders, rule, validator) }
+		};
 
 		/// <summary>
 		/// Enabling this maintains compatibility with FluentValidation 6.4, where discovery of validators was limited to top level models. 
@@ -41,7 +55,7 @@ namespace FluentValidation.WebApi
 		public bool DisableDiscoveryOfPropertyValidators { get; set; } = false;
 
 		public FluentValidationModelValidatorProvider(IValidatorFactory validatorFactory = null) {
-			ValidatorFactory = validatorFactory ?? new AttributedValidatorFactory();
+			ValidatorFactory = validatorFactory ?? new AttributedValidatorFactory();			
 		}
 
 		/// <summary>
@@ -52,23 +66,103 @@ namespace FluentValidation.WebApi
 
 			var provider = new FluentValidationModelValidatorProvider();
 			configurationExpression(provider);
-		    configuration.Services.Replace(typeof(IBodyModelValidator), new FluentValidationBodyModelValidator());
-			configuration.Services.Add(typeof(ModelValidatorProvider), provider);
+		//	configuration.Services.Replace(typeof(IBodyModelValidator), new FluentValidationBodyModelValidator());
+			configuration.Services.Add(typeof(ModelValidatorProvider), provider);			
 		}
 
 		public override IEnumerable<ModelValidator> GetValidators(ModelMetadata metadata, IEnumerable<ModelValidatorProvider> validatorProviders)
 		{
-			if (DisableDiscoveryOfPropertyValidators && IsValidatingProperty(metadata)) {
-				yield break;
+			if (DisableDiscoveryOfPropertyValidators && IsValidatingProperty(metadata))
+			{				
+				return new List<ModelValidator>();
 			}
 
-			IValidator validator = ValidatorFactory.GetValidator(metadata.ModelType);
+			IValidator validator = CreateValidator(metadata);
+
+			if (validator == null)
+			{				
+				return new List<ModelValidator>();
+			}
+
+			return GetValidatorsForModel(metadata, validatorProviders, validator);
+		}
+
+		protected IEnumerable<ModelValidator> GetValidatorsForProperty(ModelMetadata metadata, IEnumerable<ModelValidatorProvider> validatorProviders, IValidator validator)
+		{
+			var modelValidators = new List<ModelValidator>();
+
+			if (validator != null)
+			{
+				var descriptor = validator.CreateDescriptor();
+
+				var validatorsWithRules = from rule in descriptor.GetRulesForMember(metadata.PropertyName)
+										  let propertyRule = (PropertyRule)rule
+										  let validators = rule.Validators
+										  where validators.Any()
+										  from propertyValidator in validators
+										  let modelValidatorForProperty = GetModelValidator(metadata, validatorProviders, propertyRule, propertyValidator)
+										  where modelValidatorForProperty != null
+										  select modelValidatorForProperty;
+
+				modelValidators.AddRange(validatorsWithRules);
+			}
+			/*
+			if (validator != null && metadata.IsRequired && AddImplicitRequiredValidator)
+			{
+				bool hasRequiredValidators = modelValidators.Any(x => x.IsRequired);
+
+				//If the model is 'Required' then we assume it must have a NotNullValidator. 
+				//This is consistent with the behaviour of the DataAnnotationsModelValidatorProvider
+				//which silently adds a RequiredAttribute
+				/*
+				if (!hasRequiredValidators)
+				{
+					modelValidators.Add(CreateNotNullValidatorForProperty(metadata, context));
+				}
+			} */
+			return modelValidators;
+		}
+		protected virtual ModelValidator GetModelValidator(ModelMetadata meta, IEnumerable<ModelValidatorProvider> providers, PropertyRule rule, IPropertyValidator propertyValidator)
+		{
+			var type = propertyValidator.GetType();
+
+			var factory = validatorFactories
+				.Where(x => x.Key.IsAssignableFrom(type))
+				.Select(x => x.Value)
+				.FirstOrDefault() ?? ((metadata, validatorProviders, description, validator) => new FluentValidationPropertyValidator(metadata, validatorProviders, description, validator));
+
+			return factory(meta, providers, rule, propertyValidator);
+		}
+		protected virtual IValidator CreateValidator(ModelMetadata metadata)
+		{
+			if (IsValidatingProperty(metadata))
+			{
+				return ValidatorFactory.GetValidator(metadata.ModelType);//ContainerType
+			}
+			return ValidatorFactory.GetValidator(metadata.ModelType);
+		}
+
+		//public override IEnumerable<ModelValidator> GetValidators(ModelMetadata metadata, IEnumerable<ModelValidatorProvider> validatorProviders)
+		//{
+		//	if (DisableDiscoveryOfPropertyValidators && IsValidatingProperty(metadata)) {
+		//		yield break;
+		//	}
+
+		//	IValidator validator = ValidatorFactory.GetValidator(metadata.ModelType);
 			
-			if (validator == null) {
-				yield break;
-			}
+		//	if (validator == null) {
+		//		yield break;
+		//	}
 
-			yield return new FluentValidationModelValidator(validatorProviders, validator);
+		//	yield return new FluentValidationModelValidator(metadata, validatorProviders, validator);
+		//}
+
+		protected virtual IEnumerable<ModelValidator> GetValidatorsForModel(ModelMetadata metadata, IEnumerable<ModelValidatorProvider> validatorProviders, IValidator validator)
+		{
+			if (validator != null)
+			{
+				yield return new FluentValidationModelValidator(metadata, validatorProviders, validator);
+			}
 		}
 
 		protected virtual bool IsValidatingProperty(ModelMetadata metadata) {

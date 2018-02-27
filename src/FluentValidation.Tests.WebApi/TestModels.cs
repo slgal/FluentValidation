@@ -154,4 +154,26 @@ namespace FluentValidation.Tests.WebApi {
             RuleFor(m => m.Name).NotEmpty();
         }
     }
+
+	[Validator(typeof(RulesetTestValidator))]
+	public class RulesetTestModel
+	{
+		public string Email { get; set; }
+		public string Surname { get; set; }
+		public string Forename { get; set; }
+	}
+
+	public class RulesetTestValidator : AbstractValidator<RulesetTestModel>
+	{
+		public RulesetTestValidator()
+		{
+			RuleFor(x => x.Email).NotEqual("foo");
+
+			RuleSet("Names", () => {
+				RuleFor(x => x.Surname).NotEqual("foo");
+				RuleFor(x => x.Forename).NotEqual("foo");
+			});
+		}
+	}
+
 }

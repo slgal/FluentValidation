@@ -16,9 +16,11 @@
 // The latest version of this file can be found at https://github.com/JeremySkinner/FluentValidation
 #endregion
 namespace FluentValidation.Tests.WebApi {
+	using FluentValidation.WebApi;
 	using System.Collections.Generic;
 	using System.Linq;
 	using System.Web.Http;
+	using System.Web.Http.ModelBinding;
 	using System.Web.Http.Results;
 
 	public class TestController : ApiController {
@@ -74,6 +76,12 @@ namespace FluentValidation.Tests.WebApi {
 
 		[HttpPost]
 		public IHttpActionResult TestModelWithoutValidator(TestModelWithoutValidator model) {
+			return OutputErrors();
+		}
+
+		[HttpPost]		
+		public IHttpActionResult RulesetTestModel([CustomizeValidator(RuleSet = "Names")]RulesetTestModel model)
+		{
 			return OutputErrors();
 		}
 

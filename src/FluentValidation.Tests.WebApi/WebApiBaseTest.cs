@@ -15,7 +15,9 @@
 // 
 // The latest version of this file can be found at https://github.com/JeremySkinner/FluentValidation
 #endregion
-namespace FluentValidation.Tests.WebApi {
+namespace FluentValidation.Tests.WebApi
+{
+	using FluentValidation.WebApi;
 	using System;
 	using System.Collections.Generic;
 	using System.IO;
@@ -25,7 +27,8 @@ namespace FluentValidation.Tests.WebApi {
 	using System.Threading;
 	using System.Threading.Tasks;
 	using System.Web.Http;
-	using FluentValidation.WebApi;
+	using System.Web.Http.ModelBinding;
+	using System.Web.Http.ModelBinding.Binders;
 
 	public abstract class WebApiBaseTest {
 		protected List<SimpleError> InvokeTest<T>(string input, string contentType = "application/x-www-form-urlencoded") {
@@ -37,6 +40,11 @@ namespace FluentValidation.Tests.WebApi {
 			HttpConfiguration config = new HttpConfiguration();
 			config.Routes.MapHttpRoute("Default", "api/{controller}/{action}/{id}", new {id = RouteParameter.Optional});
 			config.IncludeErrorDetailPolicy = IncludeErrorDetailPolicy.Always;
+
+			var provider = new SimpleModelBinderProvider(
+			   typeof(RulesetTestModel), new CustomizeValidatorAttribute { RuleSet="defaults,Names"});
+			config.Services.Insert(typeof(ModelBinderProvider), 0, provider);
+
 			FluentValidationModelValidatorProvider.Configure(config);
 
 			HttpServer server = new HttpServer(config);

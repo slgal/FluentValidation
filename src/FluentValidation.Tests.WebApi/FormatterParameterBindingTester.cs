@@ -209,7 +209,7 @@ namespace FluentValidation.Tests.WebApi {
 		[Fact]
 		public void Should_add_all_erorrs_in_one_go_when_NotEmpty_rule_specified_for_non_nullable_value_type() {
 			actionContext.Request.Content = JsonContent(@"{
-				SomeBool:'false',
+				SomeBool:false,
 				Id:0}");
 
 			var binder = CreateParameterBinder("testModel5", typeof(TestModel5));
@@ -256,7 +256,7 @@ namespace FluentValidation.Tests.WebApi {
 		// and I didn't find a way to override that behaviour
 		[Fact]
 		public void Should_add_default_message_to_modelstate() {
-			actionContext.Request.Content = JsonContent(@"{Id:''}");
+			actionContext.Request.Content = JsonContent(@"{Id:null}");
 
 			var binder = CreateParameterBinder("testModel3", typeof(TestModel3));
 			binder.ExecuteBindingAsync(modelMetadataProvider, actionContext, new CancellationToken()).Wait();
@@ -266,7 +266,7 @@ namespace FluentValidation.Tests.WebApi {
 
 		[Fact]
 		public void Should_add_default_message_to_modelstate_when_there_is_no_required_validator_explicitly_specified() {
-			actionContext.Request.Content = JsonContent(@"{Id:''}");
+			actionContext.Request.Content = JsonContent(@"{Id:null}");
 
 			var binder = CreateParameterBinder("testModel6", typeof(TestModel6));
 			binder.ExecuteBindingAsync(modelMetadataProvider, actionContext, new CancellationToken()).Wait();
@@ -276,7 +276,7 @@ namespace FluentValidation.Tests.WebApi {
 
 		[Fact]
 		public void Should_validate_greater_than() {
-			actionContext.Request.Content = JsonContent(@"{AnIntProperty:'5'}");
+			actionContext.Request.Content = JsonContent(@"{AnIntProperty:5}");
 
 			var binder = CreateParameterBinder("testModel7", typeof(TestModel7));
 			binder.ExecuteBindingAsync(modelMetadataProvider, actionContext, new CancellationToken()).Wait();
@@ -286,7 +286,7 @@ namespace FluentValidation.Tests.WebApi {
 
 		[Fact]
 		public void Should_validate_custom_after_property_errors() {
-			actionContext.Request.Content = JsonContent(@"{AnIntProperty:'7',CustomProperty:'14'}");
+			actionContext.Request.Content = JsonContent(@"{AnIntProperty:7,CustomProperty:14}");
 
 			var binder = CreateParameterBinder("testModel7", typeof(TestModel7));
 			binder.ExecuteBindingAsync(modelMetadataProvider, actionContext, new CancellationToken()).Wait();

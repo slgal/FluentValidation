@@ -28,24 +28,41 @@ namespace FluentValidation.WebApi
 
 	public class FluentValidationModelValidator : ModelValidator {
 		readonly IValidator validator;
+		readonly CustomizeValidatorAttribute customizations;
 
-		public FluentValidationModelValidator(IEnumerable<ModelValidatorProvider> validatorProviders, IValidator validator)
+		public FluentValidationModelValidator(ModelMetadata modelMetadata, IEnumerable<ModelValidatorProvider> validatorProviders, IValidator validator)
 			: base(validatorProviders) {
 			this.validator = validator;
+			this.customizations = CustomizeValidatorAttribute.GetFromModelMetadata(modelMetadata) ?? new CustomizeValidatorAttribute();
 		}
 
 		public override IEnumerable<ModelValidationResult> Validate(ModelMetadata metadata, object container) {
 			if (metadata.Model != null) {
-				var selector = ValidatorOptions.ValidatorSelectors.DefaultValidatorSelectorFactory();
+				var selector = customizations.ToValidatorSelector();
+				var interceptor = customizations.GetInterceptor() ?? (validator as IValidatorInterceptor);
 				var context = new ValidationContext(metadata.Model, new PropertyChain(), selector);
 				context.RootContextData["InvokedByWebApi"] = true;
 
+				if (interceptor != null)
+				{
+					// Allow the user to provide a customized context
+					// However, if they return null then just use the original context.
+					context = interceptor.BeforeWebApiValidation(/*ControllerContext,*/ context) ?? context;
+				}
 
 				var result = validator.Validate(context);
 
-				if (!result.IsValid) {
-					return ConvertValidationResultToModelValidationResults(result);
+				if (interceptor != null)
+				{
+					// allow the user to provice a custom collection of failures, which could be empty.
+					// However, if they return null then use the original collection of failures. 
+					result = interceptor.AfterWebApiValidation(/*ControllerContext, */context, result) ?? result;
 				}
+
+				if (!result.IsValid)
+				{
+					return ConvertValidationResultToModelValidationResults(result);
+				}				
 			}
 			return Enumerable.Empty<ModelValidationResult>();
 		}
